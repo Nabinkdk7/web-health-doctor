@@ -513,6 +513,18 @@
 
     <!-- Footer credit removed; credit lives in the header top row. -->
   </div>
+
+  <!-- Health verdict notification (good / danger) -->
+  <div id="healthToast" class="health-toast" hidden>
+    <div class="health-toast-inner">
+      <span class="health-icon" id="healthIcon" aria-hidden="true"></span>
+      <span class="health-copy">
+        <span class="health-title" id="healthTitle"></span>
+        <span class="health-msg" id="healthMsg"></span>
+      </span>
+      <button class="health-close" id="healthClose" type="button" title="Dismiss" aria-label="Dismiss notification" hidden>&times;</button>
+    </div>
+  </div>
   <script src="popup.js"></script>
 </body>
 </html>

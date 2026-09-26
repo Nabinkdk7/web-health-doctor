@@ -155,6 +155,10 @@
       loadingState.classList.add("hidden");
       errorState.classList.add("hidden");
       resultsContainer.classList.remove("hidden");
+      try {
+        var health = assessScanHealth(currentData);
+        showHealthVerdict(health.state, health.title, health.msg);
+      } catch (e) {}
       btnAnalyze.disabled = false;
       if (btnAnalyzeInitial) btnAnalyzeInitial.disabled = false;
     });
@@ -168,6 +172,270 @@
 
   // Auto-scan the moment the popup opens on a real page.
   window.setTimeout(runScan, 80);
+
+  // ============================================
+  // HEALTH VERDICT NOTIFICATION (toast + sound)
+  // ============================================
+  var healthToastTimer = null;
+
+  function assessScanHealth(data) {
+    var issues = collectIssues(data);
+    var critical = 0;
+    var warnings = 0;
+    var broken = 0;
+    issues.forEach(function (it) {
+      if (it.level === "critical") critical++;
+      else if (it.level === "warning") warnings++;
+      if (it.title === "Broken link targets") broken++;
+    });
+    var overall = data && data.scores && typeof data.scores.overall === "number" ? data.scores.overall : null;
+    if (critical > 0 || broken > 0 || (overall !== null && overall < 50)) {
+      var reasons = [];
+      if (critical) reasons.push(critical + " critical issue" + (critical === 1 ? "" : "s"));
+      if (broken) reasons.push(broken + " broken link" + (broken === 1 ? "" : "s"));
+      if (overall !== null && overall < 50) reasons.push("overall score " + overall);
+      return {
+        state: "danger",
+        title: "Heads up \u2014 this page needs work",
+        msg: reasons.join(" \u00B7 ") + ". Check the issues list / Debug tab."
+      };
+    }
+    if (warnings > 0) {
+      return {
+        state: "good",
+        title: "Website is good",
+        msg: "Only " + warnings + " minor note" + (warnings === 1 ? "" : "s") + (overall !== null ? " \u00B7 score " + overall : "") + "."
+      };
+    }
+    return {
+      state: "good",
+      title: "Website is good",
+      msg: "No issues found" + (overall !== null ? " \u00B7 score " + overall : "") + "."
+    };
+  }
+
+  function assessDebugHealth(audit) {
+    var level = "good";
+    if (audit) {
+      level = audit.level || (audit.verdict && audit.verdict.level) || "good";
+    }
+    var totals = audit ? (audit.totals || {}) : {};
+    var errors = totals.errors || 0;
+    var warnings = totals.warnings || 0;
+    if (level === "critical" || level === "bad" || errors > 0) {
+      return {
+        state: "danger",
+        title: "Audit found problems",
+        msg: errors + " critical" + (errors === 1 ? "" : "s") + " \u00B7 " + warnings + " warning" + (warnings === 1 ? "" : "s") + ". Review the Debug report."
+      };
+    }
+    if (level === "warning" || level === "warn" || warnings > 0) {
+      return {
+        state: "good",
+        title: "Website is good",
+        msg: "Deep audit passed with " + warnings + " minor warning" + (warnings === 1 ? "" : "s") + "."
+      };
+    }
+    return { state: "good", title: "Website is good", msg: "Deep audit passed \u2014 every check is green." };
+  }
+
+  function showHealthVerdict(state, title, msg) {
+    var toast = document.getElementById("healthToast");
+    if (!toast) return;
+    if (healthToastTimer) { window.clearTimeout(healthToastTimer); healthToastTimer = null; }
+    var good = state !== "danger";
+    toast.className = "health-toast " + (good ? "good" : "danger");
+    var icon = document.getElementById("healthIcon");
+    if (icon) {
+      icon.innerHTML = good
+        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>'
+        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+    }
+    var titleEl = document.getElementById("healthTitle");
+    if (titleEl) titleEl.textContent = title;
+    var msgEl = document.getElementById("healthMsg");
+    if (msgEl) msgEl.textContent = msg;
+    var closeBtn = document.getElementById("healthClose");
+    if (closeBtn) closeBtn.hidden = false;
+    toast.hidden = false;
+    playHealthSound(state);
+    healthToastTimer = window.setTimeout(hideHealthToast, good ? 6000 : 9000);
+  }
+
+  function hideHealthToast() {
+    var toast = document.getElementById("healthToast");
+    if (!toast) return;
+    if (healthToastTimer) { window.clearTimeout(healthToastTimer); healthToastTimer = null; }
+    toast.hidden = true;
+  }
+
+  var healthCloseBtn = document.getElementById("healthClose");
+  if (healthCloseBtn) healthCloseBtn.addEventListener("click", hideHealthToast);
+
+  // ---- Web Audio: synthesized verdict sounds (no audio files, works offline) ----
+  var _audioCtx = null;
+
+  function primeAudio() {
+    if (!_audioCtx) {
+      try { _audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { _audioCtx = null; }
+    }
+    if (_audioCtx && _audioCtx.state === "suspended") {
+      try { _audioCtx.resume(); } catch (e) {}
+    }
+    return _audioCtx;
+  }
+
+  // Popups open from a toolbar click (a user gesture), so creating and
+  // resuming the context right away lets Chrome start audio immediately.
+  primeAudio();
+
+  // The last verdict that could not play yet because of the autoplay policy.
+  // Once audio is running (on a gesture) it is replayed, so no sound is lost.
+  var pendingHealthSound = null;
+
+  // Keep the context unblocked for the whole popup lifetime: retry the resume
+  // on every interaction, and flush any verdict sound that was waiting.
+  function resumeAudioOnGesture() {
+    var c = primeAudio();
+    if (!c) return;
+    if (c.state === "running") {
+      if (pendingHealthSound) playHealthSoundNow(c, pendingHealthSound);
+      return;
+    }
+    try {
+      var r = c.resume();
+      if (r && typeof r.then === "function") {
+        r.then(function () { if (pendingHealthSound) playHealthSoundNow(c, pendingHealthSound); }, function () {});
+      } else if (pendingHealthSound) {
+        playHealthSoundNow(c, pendingHealthSound);
+      }
+    } catch (e) {}
+  }
+  window.addEventListener("pointerdown", resumeAudioOnGesture);
+  window.addEventListener("pointerup", resumeAudioOnGesture);
+  window.addEventListener("keydown", resumeAudioOnGesture);
+  window.addEventListener("touchend", resumeAudioOnGesture);
+
+  function playHealthSound(state) {
+    pendingHealthSound = state;
+    var ctx = primeAudio();
+    if (!ctx) return;
+    if (ctx.state === "running") {
+      playHealthSoundNow(ctx, state);
+      return;
+    }
+    try {
+      var r = ctx.resume();
+      if (r && typeof r.then === "function") r.catch(function () {});
+    } catch (e) {}
+    // If the resume succeeds, the flush below plays the pending sound; if it
+    // is still blocked, the next gesture's resumeAudioOnGesture replays it.
+    if (r && typeof r.then === "function") {
+      r.then(function () { if (pendingHealthSound) playHealthSoundNow(ctx, pendingHealthSound); }, function () {});
+    }
+  }
+
+  function playHealthSoundNow(ctx, state) {
+    if (pendingHealthSound === state) pendingHealthSound = null;
+    try {
+      if (state === "danger") playDangerPop(ctx);
+      else playGoodChime(ctx);
+    } catch (e) { /* sound is a bonus; never break the UI */ }
+  }
+
+  // Pleasant cinematic "all clear": a soft bloom, a rising C-major arpeggio,
+  // and a sparkle on top.
+  function playGoodChime(ctx) {
+    var t = ctx.currentTime;
+    function pluck(freq, at, dur, gain, type, endFreq) {
+      var osc = ctx.createOscillator();
+      var g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t + at);
+      g.gain.exponentialRampToValueAtTime(gain, t + at + 0.018);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + at + dur);
+      osc.type = type || "triangle";
+      osc.frequency.setValueAtTime(freq, t + at);
+      if (endFreq) osc.frequency.exponentialRampToValueAtTime(endFreq, t + at + dur);
+      osc.connect(g); g.connect(ctx.destination);
+      osc.start(t + at); osc.stop(t + at + dur + 0.05);
+    }
+    pluck(130.81, 0, 0.5, 0.14, "sine", 65.41);
+    pluck(523.25, 0.02, 0.55, 0.18, "triangle");
+    pluck(659.25, 0.14, 0.6, 0.16, "triangle");
+    pluck(783.99, 0.26, 0.72, 0.14, "triangle");
+    pluck(1046.5, 0.38, 0.85, 0.11, "sine");
+    pluck(2093.0, 0.44, 0.5, 0.03, "sine");
+  }
+
+  // Futuristic sci-fi UI tone: a single clean "warp ping" like a starship
+  // console alert — a sine that sweeps swiftly upward and settles, with a
+  // lower follower, a beating metallic shimmer pair, and a soft sub thump
+  // underneath. Dry, gated, and full-volume through a soft limiter.
+  function playDangerPop(ctx) {
+    var t = ctx.currentTime;
+    var master = ctx.createGain();
+    master.gain.value = 0.9;
+    var comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -12;
+    comp.knee.value = 6;
+    comp.ratio.value = 8;
+    comp.attack.value = 0.002;
+    comp.release.value = 0.06;
+    master.connect(comp);
+    comp.connect(ctx.destination);
+
+    // A clean sine tone with optional frequency ramps and a fast gate.
+    function tone(freq, at, dur, gain, ramps) {
+      var osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, t + at);
+      if (ramps) {
+        for (var i = 0; i < ramps.length; i++) {
+          osc.frequency.exponentialRampToValueAtTime(ramps[i][0], t + at + ramps[i][1]);
+        }
+      }
+      var g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t + at);
+      g.gain.exponentialRampToValueAtTime(gain, t + at + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + at + dur);
+      osc.connect(g);
+      g.connect(master);
+      osc.start(t + at);
+      osc.stop(t + at + dur + 0.02);
+    }
+
+    // A micro highpassed click so each ping lands crisply.
+    function click(at, vol) {
+      var len = Math.floor(ctx.sampleRate * 0.005);
+      var buf = ctx.createBuffer(1, len, ctx.sampleRate);
+      var dd = buf.getChannelData(0);
+      var k;
+      for (k = 0; k < len; k++) dd[k] = Math.random() * 2 - 1;
+      var c = ctx.createBufferSource();
+      c.buffer = buf;
+      var hp = ctx.createBiquadFilter();
+      hp.type = "highpass";
+      hp.frequency.value = 3500;
+      var cgn = ctx.createGain();
+      cgn.gain.setValueAtTime(0.0001, t + at);
+      cgn.gain.exponentialRampToValueAtTime(vol, t + at + 0.001);
+      cgn.gain.exponentialRampToValueAtTime(0.0001, t + at + 0.005);
+      c.connect(hp);
+      hp.connect(cgn);
+      cgn.connect(master);
+      c.start(t + at);
+      c.stop(t + at + 0.006);
+    }
+
+    tone(62, 0, 0.3, 0.45, [[45, 0.24]]);                    // soft sub thump
+    tone(560, 0, 0.36, 0.5, [[1560, 0.16], [1100, 0.36]]);   // warp ping (leader)
+    tone(420, 0.09, 0.36, 0.42, [[1170, 0.24], [830, 0.44]]); // lower follower
+    tone(2200, 0.01, 0.18, 0.12);                            // metallic tablet
+    tone(2206, 0.01, 0.18, 0.08);                            // detuned pair (beating)
+    tone(3300, 0.1, 0.16, 0.07);                             // upper shimmer
+    click(0, 0.18);
+    click(0.09, 0.14);
+  }
 
   function resetDevMod() {
     ["devmodLinksResults", "devmodTypoResults", "eleInspectorResults", "devmodCssResults", "devmodFormsResults", "devmodImagesResults", "devmodMediaResults", "devmodJsResults"].forEach(function (id) {
@@ -2508,6 +2776,11 @@
       groupsEl.innerHTML = html;
       wireDebugLocate();
     }
+
+    try {
+      var dh = assessDebugHealth(data);
+      showHealthVerdict(dh.state, dh.title, dh.msg);
+    } catch (e) {}
   }
 
   function sevIcon(sev) {
