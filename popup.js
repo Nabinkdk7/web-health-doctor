@@ -31,6 +31,10 @@
     if (btn.getAttribute("data-tab") === "debug" && currentData && !debugAuditRan) {
       runDebugAudit();
     }
+    // Load the version list the first time the Version tab is opened.
+    if (btn.getAttribute("data-tab") === "version") {
+      initVersionPanel();
+    }
     // Active-tab proximity: keep the active tab fully visible in the rail.
     revealTabInNav(btn);
   }
@@ -97,6 +101,171 @@
     tabNav.addEventListener("scroll", syncTabRailFades, { passive: true });
     window.setTimeout(syncTabRailFades, 0);
   }
+
+  // ---- Version Manager + update banner ----
+  var WD_REPO = { owner: "Nabinkdk7", repo: "web-health-doctor" };
+  var versionPanelLoaded = false;
+  var versionCurrent = "";
+  var versionActive = "";
+
+  function wdNormTag(t) { return String(t || "").replace(/^v/i, "").trim(); }
+
+  function wdSendGit(payload, cb) {
+    chrome.runtime.sendMessage(payload, function (res) {
+      if (chrome.runtime.lastError) { if (cb) cb(null); return; }
+      if (cb) cb(res);
+    });
+  }
+
+  function wdZipUrl(tag) {
+    return "https://github.com/" + WD_REPO.owner + "/" + WD_REPO.repo + "/archive/refs/tags/" + encodeURIComponent(tag) + ".zip";
+  }
+
+  function setVersionStatus(text) {
+    var el = document.getElementById("versionStatus");
+    if (!el) return;
+    if (!text) { el.classList.add("hidden"); el.textContent = ""; return; }
+    el.textContent = text;
+    el.classList.remove("hidden");
+  }
+
+  function renderVersionList(items) {
+    var list = document.getElementById("versionList");
+    if (!list) return;
+    var pill = document.getElementById("versionCurrent");
+    if (pill) pill.textContent = versionCurrent ? "Installed: v" + versionCurrent : "Installed: --";
+    list.innerHTML = "";
+    (items || []).forEach(function (v) {
+      var row = document.createElement("div");
+      row.className = "version-item";
+      var main = document.createElement("div");
+      main.className = "version-item-main";
+      var tagEl = document.createElement("div");
+      tagEl.className = "version-tag";
+      tagEl.textContent = v.tag;
+      main.appendChild(tagEl);
+      var label = document.createElement("div");
+      label.className = "version-label";
+      label.textContent = v.label || "Release " + v.tag;
+      main.appendChild(label);
+      row.appendChild(main);
+      var cur = wdNormTag(versionCurrent), act = wdNormTag(versionActive), tagNorm = wdNormTag(v.tag);
+      var badges = document.createElement("div");
+      badges.className = "version-badges";
+      if (cur && tagNorm === cur) {
+        var inst = document.createElement("span");
+        inst.className = "version-badge version-badge-installed";
+        inst.textContent = "Installed";
+        badges.appendChild(inst);
+      }
+      if (act && tagNorm === act) {
+        var actB = document.createElement("span");
+        actB.className = "version-badge version-badge-active";
+        actB.textContent = "Active";
+        badges.appendChild(actB);
+      }
+      row.appendChild(badges);
+      var actions = document.createElement("div");
+      actions.className = "version-actions";
+      var sw = document.createElement("button");
+      sw.type = "button";
+      sw.className = "btn-ghost version-switch";
+      sw.setAttribute("data-tag", v.tag);
+      if (act && tagNorm === act) { sw.textContent = "Active"; sw.disabled = true; }
+      else if (cur && tagNorm === cur) { sw.textContent = "Installed"; sw.disabled = true; }
+      else { sw.textContent = "Switch"; }
+      actions.appendChild(sw);
+      var dl = document.createElement("button");
+      dl.type = "button";
+      dl.className = "btn-ghost version-dl";
+      dl.setAttribute("data-tag", v.tag);
+      dl.title = "Download " + v.tag + " package (.zip)";
+      dl.textContent = ".zip";
+      actions.appendChild(dl);
+      row.appendChild(actions);
+      list.appendChild(row);
+    });
+  }
+
+  function initVersionPanel() {
+    if (versionPanelLoaded) return;
+    versionPanelLoaded = true;
+    var list = document.getElementById("versionList");
+    if (list) list.innerHTML = '<div class="version-loading">Checking GitHub\u2026</div>';
+    setVersionStatus("");
+    wdSendGit({ action: "getVersions" }, function (res) {
+      if (!res || !res.ok) {
+        if (list) list.innerHTML = "";
+        setVersionStatus((res && res.error) || "Could not fetch versions. Check your connection and try Refresh.");
+        return;
+      }
+      versionCurrent = res.current || "";
+      versionActive = res.active || "";
+      renderVersionList(res.versions || []);
+    });
+  }
+
+  var btnVersionRefresh = document.getElementById("btnVersionRefresh");
+  if (btnVersionRefresh) btnVersionRefresh.addEventListener("click", initVersionPanel);
+  var btnVersionCheckUpdate = document.getElementById("btnVersionCheckUpdate");
+  if (btnVersionCheckUpdate) btnVersionCheckUpdate.addEventListener("click", function () {
+    setVersionStatus("Checking GitHub for a newer version\u2026");
+    wdSendGit({ action: "checkUpdate", force: true }, function (res) {
+      if (!res) { setVersionStatus("Could not reach GitHub."); return; }
+      if (res.update && res.latest) setVersionStatus("New version " + res.latest + " is available \u2014 notification shown.");
+      else if (!res.ok) setVersionStatus(res.error || "Update check failed.");
+      else setVersionStatus("You are on the latest version (" + (res.current || "?") + ").");
+    });
+  });
+  var versionListEl = document.getElementById("versionList");
+  if (versionListEl) versionListEl.addEventListener("click", function (e) {
+    var t = e.target;
+    if (!t || !t.getAttribute || typeof t.getAttribute !== "function") return;
+    var btn = (t.classList && t.classList.contains("version-switch")) || (t.classList && t.classList.contains("version-dl"))
+      ? t
+      : (t.parentElement && ((t.parentElement.classList && t.parentElement.classList.contains("version-switch")) || (t.parentElement.classList && t.parentElement.classList.contains("version-dl")))
+        ? t.parentElement : null);
+    if (!btn) return;
+    var tag = btn.getAttribute("data-tag");
+    if (!tag) return;
+    if (btn.classList.contains("version-switch")) {
+      wdSendGit({ action: "setActiveVersion", tag: tag }, function (res) {
+        if (!res || !res.ok) { setVersionStatus("Could not switch to " + tag + "."); return; }
+        versionActive = tag;
+        initVersionPanel();
+        setVersionStatus("Active version set to " + tag + ". Downloading its package\u2026");
+      });
+    }
+    if (typeof chrome.downloads === "undefined" || !chrome.downloads.download) {
+      setVersionStatus("Downloads are unavailable in this browser.");
+      return;
+    }
+    chrome.downloads.download({ url: wdZipUrl(tag), filename: "web-health-doctor-" + wdNormTag(tag) + ".zip", conflictAction: "uniquify" }, function () {
+      if (chrome.runtime.lastError) setVersionStatus("Download could not start \u2014 the tag may not exist on GitHub yet.");
+    });
+  });
+
+  var updateBanner = document.getElementById("updateBanner");
+  function wdShowUpdate(latest) {
+    if (!updateBanner || !latest) return;
+    var txt = document.getElementById("updateBannerText");
+    if (txt) txt.textContent = "Web Doctor " + latest + " is available";
+    updateBanner.classList.remove("hidden");
+  }
+  function wdCheckOnOpen() {
+    wdSendGit({ action: "checkUpdate", force: false }, function (res) {
+      if (res && res.ok && res.update && res.latest) wdShowUpdate(res.latest);
+    });
+  }
+  var btnUpdateView = document.getElementById("btnUpdateView");
+  if (btnUpdateView) btnUpdateView.addEventListener("click", function () {
+    chrome.tabs.create({ url: "https://github.com/" + WD_REPO.owner + "/" + WD_REPO.repo + "/tags" }, function () { void chrome.runtime.lastError; });
+  });
+  var btnUpdateDismiss = document.getElementById("btnUpdateDismiss");
+  if (btnUpdateDismiss) btnUpdateDismiss.addEventListener("click", function () {
+    if (updateBanner) updateBanner.classList.add("hidden");
+  });
+  wdCheckOnOpen();
 
   // ---- Run scan toggles the initial / loading / error / results states ----
   var trackedIndex = -1;

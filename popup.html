@@ -35,6 +35,14 @@
       </div>
     </header>
 
+    <!-- Update available banner -->
+    <div id="updateBanner" class="update-banner hidden" role="status" aria-live="polite">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/></svg>
+      <span id="updateBannerText" class="update-banner-text">New version available</span>
+      <button id="btnUpdateView" class="update-banner-btn" type="button">View release</button>
+      <button id="btnUpdateDismiss" class="update-banner-close" type="button" title="Dismiss" aria-label="Dismiss">&times;</button>
+    </div>
+
     <!-- Initial State -->
     <div id="initialState" class="initial-state">
       <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -114,6 +122,10 @@
         <button class="tab-btn" data-tab="audit" title="Generate a complete audit report file">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 3h15a1 1 0 0 1 1 1v13H3V4a1 1 0 0 1 1-1z"/><path d="M8 20h8M9 7h6M9 11h6"/></svg>
           <span>Audit</span>
+        </button>
+        <button class="tab-btn" data-tab="version" title="Version Manager \u2014 see all versions and switch to any previous one">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><circle cx="7" cy="7" r="1.5"/></svg>
+          <span>Version</span>
         </button>
       </div>
 
@@ -506,6 +518,21 @@
               <button id="btnDownloadCrawlReport" class="btn-ghost btn-download" type="button" disabled>Download Site Report (.html)</button>
             </div>
             <p class="card-hint" id="crawlHint"></p>
+          </div>
+        </div>
+
+        <!-- Version Manager Tab -->
+        <div class="tab-panel" id="panel-version">
+          <div class="card">
+            <h3 class="card-title">Version Manager</h3>
+            <p class="card-hint">Every published version of Web Doctor, newest first. The installed release is highlighted, the active one drives which package you restore. Switching saves the chosen version as active and downloads its .zip &mdash; to roll back fully, load that folder at chrome://extensions (a running extension cannot replace its own files). The background worker also checks GitHub and raises a browser notification whenever a newer version is published.</p>
+            <div class="version-top">
+              <span class="version-pill" id="versionCurrent">Checking\u2026</span>
+              <button id="btnVersionRefresh" class="btn-ghost" type="button">Refresh</button>
+              <button id="btnVersionCheckUpdate" class="btn-apply" type="button">Check for update</button>
+            </div>
+            <div id="versionList" class="version-list" aria-live="polite"></div>
+            <div id="versionStatus" class="version-status hidden" aria-live="polite"></div>
           </div>
         </div>
       </div>

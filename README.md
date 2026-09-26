@@ -4,7 +4,7 @@
 
 **Web Doctor** is a browser extension that checks the health of any webpage. One click runs a full, on-demand audit of the page you're on — DOM size, core-web-vitals performance, responsiveness, SEO, accessibility, structure, and the technology behind the site — then shows you exactly what to fix and where.
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Version](https://img.shields.io/badge/version-1.3.0-blue)
 ![Manifest](https://img.shields.io/badge/Chrome%20Manifest-v3-green)
 
 ## About
@@ -16,6 +16,21 @@ It was built to answer three questions about any site you open:
 1. **What is wrong with this page?** — a full diagnostic readout of DOM, performance, SEO, structure, accessibility, and media.
 2. **Why is it slow / heavy / broken?** — Core Web Vitals (LCP, CLS, INP) measured from the real timeline, oversized DOM hotspots, broken links, missing alt text, unlabeled controls, dead anchors.
 3. **What is it built with?** — technology, framework, CMS, and library detection with element-level targeting so fixes are concrete and locatable.
+
+## What's New in v1.3.0
+
+### New features
+- **Version Manager** — a new **Version** tab lists every published release (newest first, pulled from GitHub tags with a built-in fallback), shows which release is **Installed** and **Active**, and lets you **switch to any previous version** — one click sets it as the active version and downloads that release's `.zip` package for a full manual rollback.
+- **GitHub update checker** — the background service worker compares the installed version against the latest GitHub tag (on install, on browser start, every 6 hours, and whenever the popup opens) and raises a **browser notification** — *"Web Doctor update available"* — with a *View release* button. Each published version notifies only once.
+- **In-popup update banner** — when a newer version exists, a slim banner appears at the top of the popup with a *View release* link so you can jump straight to the release notes.
+
+### Fixes & improvements
+- **Page-scan verdict toast** — after every scan the popup shows an on-page **All clear / Danger** notification summarizing scan health (critical issues, broken link targets, overall score), with a synthesized chime for good results and a sci-fi "warp ping" for critical findings.
+- **Reliable notification audio** — sound is pre-primed when the popup opens and resumes on the first user gesture, so verdict chimes no longer play intermittently.
+- **Tab-rail polish** — the active tab auto-centers in the rail, edge-fade masks track scrolling, and Home/End/arrow-key navigation reaches every tab.
+- **Manifest update** — adds `notifications`, `alarms`, and `storage` permissions plus GitHub host access so update checks run in the background. The extension still ships with **zero** bundled audio files — every sound is synthesized in-browser.
+
+> **Upgrading from an earlier release:** after loading v1.3.0, open the **Version** tab to see the full version list, then rescan any page to see the new verdict toast.
 
 ## Features
 
@@ -43,9 +58,13 @@ It was built to answer three questions about any site you open:
 - **Complete audit report** — exports a clean, plain-text-branded HTML or Word-ready report generated from the audit.
 - **Site crawler** — queue-based crawl across linked pages (deduped, capped, stop-safe) that keeps results in a dedicated report tab via a service-worker-hosted blob.
 
+### Versioning & updates
+- **Version Manager** — every release listed newest-first with **Installed** / **Active** badges; one-click **Switch** saves the active version and downloads that release's `.zip` package.
+- **Update notifications** — the extension checks GitHub in the background (on install, startup, every 6 h, and on popup open) and raises a browser notification when a newer version is published, plus an in-popup banner pointing at the release.
+
 ### Everything stays clean
 - **Zero pre-injected content** into pages — the content script runs only on demand.
-- **Permission-light** — `activeTab`, `scripting`, `windows`, `downloads`; host access is **optional** and requested only when a site crawl begins.
+- **Permission-light** — only what each feature needs: `activeTab`, `scripting`, `windows`, `downloads` for scanning and exporting, plus `notifications`, `alarms`, and `storage` for update checks; site host access is **optional** and requested only when a site crawl begins.
 - **Accessible tab UI** — full keyboard support (arrow keys, Home/End), ARIA roles, and a scrollable tab rail that never clips or hides controls.
 
 ## Installation
@@ -79,8 +98,8 @@ Compress-Archive -Path manifest.json, background.js, content.js, crawl-planner.j
 
 1. Navigate to the page you want to check.
 2. Open **Web Doctor** from the toolbar — the active page is analyzed automatically.
-3. Browse the report by tab (**Overview**, **DOM**, **Dev Deep-Dive**, **Performance**, **SEO**, **Structure**, **Technology**, **Accessibility**, **Debug**, **Devices**, **Audit**).
-4. Use **Rescan** to re-run on the current page, **Debug** for the deep-dive tools, and **Audit → Crawl** to analyze linked pages across the site.
+3. Browse the report by tab (**Overview**, **DOM**, **Dev Deep-Dive**, **Performance**, **SEO**, **Structure**, **Technology**, **Accessibility**, **Debug**, **Devices**, **Audit**, **Version**).
+4. Use **Rescan** to re-run on the current page, **Debug** for the deep-dive tools, **Audit → Crawl** to analyze linked pages across the site, and **Version** to view every release or switch to a previous one.
 
 ## Project structure
 
@@ -91,17 +110,27 @@ Compress-Archive -Path manifest.json, background.js, content.js, crawl-planner.j
 ├── panel.css            # Tab rail + shared panel styles
 ├── popup.js             # Popup logic: tabs, analysis orchestration, reports
 ├── content.js           # On-demand page analysis engine (injected at scan time)
-├── background.js        # Service worker: device windows, captures, crawl, blob hosting
+├── background.js        # Service worker: device windows, captures, crawl, blob hosting, version/update checks
 ├── crawl-planner.js     # Crawl queue builder (dedupe, cap, normalization)
 └── icons/               # 16/32/48/128 px extension icons
 ```
+
+## Release history
+
+| Version | Highlights |
+| --- | --- |
+| **v1.3.0** | Version Manager tab, GitHub update checker with browser notification, in-popup update banner, scan verdict toast, reliable synthesized audio, tab-rail polish |
+| v1.2.0 | Sci-fi danger sound + reliable (autoplay-safe) audio playback |
+| v1.1.0 | Scrollable tab rail + health verdict notification |
+| v1.0.0 | Initial release |
 
 ## Privacy
 
 - No accounts, no analytics, no telemetry, no remote servers.
 - All page analysis happens locally through the `activeTab` permission you consciously grant each scan.
 - The optional `http(s)://*/*` host permission is requested **only** when you start a site crawl and can be denied without losing any single-page functionality.
-- The `downloads` permission is used only when you export an audit report.
+- Update checks call the public GitHub API for the repository's version tags only — no usage data or site content is transmitted.
+- The `downloads` permission is used only when you export an audit report or download a specific version's package from the **Version** tab.
 
 ## Author
 

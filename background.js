@@ -31,6 +31,112 @@ const PROBE_GLOBALS = function () {
   return r;
 };
 
+// =============================================
+// VERSION MANAGER + GITHUB UPDATE CHECKER
+// =============================================
+const WD_GITHUB = { owner: "Nabinkdk7", repo: "web-health-doctor", api: "https://api.github.com" };
+
+const KNOWN_VERSIONS = [
+  { tag: "v1.3.0", label: "Version Manager \u2014 switch versions + GitHub update checker" },
+  { tag: "v1.2.0", label: "Sci-fi danger sound + reliable audio playback" },
+  { tag: "v1.1.0", label: "Scrollable tab rail + health verdict notification" },
+  { tag: "v1.0.0", label: "Initial release" }
+];
+
+function wdVersionParts(v) {
+  const m = String(v || "").trim().replace(/^v/i, "").match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?/);
+  if (!m) return null;
+  return [parseInt(m[1] || 0, 10), parseInt(m[2] || 0, 10), parseInt(m[3] || 0, 10)];
+}
+
+function wdVersionCompare(a, b) {
+  const pa = wdVersionParts(a), pb = wdVersionParts(b);
+  if (!pa || !pb) return null;
+  for (let i = 0; i < 3; i++) {
+    if (pa[i] !== pb[i]) return pa[i] > pb[i] ? 1 : -1;
+  }
+  return 0;
+}
+
+// Latest tags from GitHub first, falling back to the built-in known list when
+// offline or rate-limited.
+function wdFetchTags() {
+  return fetch(WD_GITHUB.api + "/repos/" + WD_GITHUB.owner + "/" + WD_GITHUB.repo + "/tags?per_page=100", { cache: "no-store" })
+    .then(function (res) {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      return res.json();
+    })
+    .then(function (list) {
+      const out = [];
+      (list || []).forEach(function (t) { if (t && t.name) out.push(t.name); });
+      return out;
+    })
+    .catch(function () { return []; });
+}
+
+function wdGetVersions() {
+  return wdFetchTags().then(function (tags) {
+    const map = Object.create(null);
+    KNOWN_VERSIONS.forEach(function (v) { if (!map[v.tag]) map[v.tag] = { tag: v.tag, label: v.label }; });
+    tags.forEach(function (t) { if (!map[t]) map[t] = { tag: t, label: "" }; });
+    const items = [];
+    for (const k in map) items.push(map[k]);
+    items.sort(function (a, b) {
+      const c = wdVersionCompare(a.tag, b.tag);
+      return c === null ? (a.tag === b.tag ? 0 : a.tag < b.tag ? 1 : -1) : -c;
+    });
+    return items.filter(function (v) { return wdVersionParts(v.tag) !== null; });
+  });
+}
+
+function wdActiveVersion() {
+  return new Promise(function (resolve) {
+    chrome.storage.local.get("wdActiveVersion", function (o) { resolve(o.wdActiveVersion || null); });
+  });
+}
+
+function wdSetActiveVersion(tag) {
+  return new Promise(function (resolve) {
+    chrome.storage.local.set({ wdActiveVersion: tag }, function () {
+      resolve(chrome.runtime.lastError ? null : tag);
+    });
+  });
+}
+
+// Shows the update notification once per published version unless forced.
+function wdMaybeNotify(latest, force) {
+  return new Promise(function (resolve) {
+    chrome.storage.local.get("wdNotifiedTag", function (o) {
+      if (!force && o.wdNotifiedTag === latest) { resolve(false); return; }
+      chrome.notifications.create("wd-update", {
+        type: "basic",
+        iconUrl: chrome.runtime.getURL("icons/icon128.png"),
+        title: "Web Doctor update available",
+        message: "Version " + latest + " is now available. See what\u2019s new on GitHub.",
+        priority: 2,
+        requireInteraction: true,
+        buttons: [{ title: "View release" }, { title: "Later" }]
+      }, function () {
+        if (chrome.runtime.lastError) { resolve(false); return; }
+        chrome.storage.local.set({ wdNotifiedTag: latest }, function () { resolve(true); });
+      });
+    });
+  });
+}
+
+function wdCheckUpdate(force) {
+  return wdGetVersions().then(function (items) {
+    const current = chrome.runtime.getManifest().version;
+    const latest = items.length ? items[0].tag : null;
+    const upd = !!latest && wdVersionCompare(latest, current) === 1;
+    const status = { ok: true, current: current, latest: latest, update: upd, versionsCount: items.length };
+    if (upd) return wdMaybeNotify(latest, force).then(function () { return status; });
+    return status;
+  }).catch(function (err) {
+    return { ok: false, error: (err && err.message) || "Update check failed." };
+  });
+}
+
 chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
   if (sender && sender.id !== chrome.runtime.id) return;
   if (message.action === "openDevicePreview") {
@@ -69,6 +175,26 @@ chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
   if (message.action === "crawlStop") {
     stopCrawl();
     sendResponse({ success: true });
+    return true;
+  }
+  if (message.action === "getVersions") {
+    wdGetVersions().then(function (versions) {
+      wdActiveVersion().then(function (active) {
+        sendResponse({ ok: true, versions: versions, current: chrome.runtime.getManifest().version, active: active });
+      });
+    });
+    return true;
+  }
+  if (message.action === "setActiveVersion") {
+    wdSetActiveVersion(String(message.tag || "")).then(function (tag) {
+      sendResponse(tag ? { ok: true, active: tag } : { ok: false, error: "Could not save the active version." });
+    });
+    return true;
+  }
+  if (message.action === "checkUpdate") {
+    wdCheckUpdate(message.force === true).then(function (status) {
+      sendResponse(status);
+    });
     return true;
   }
   if (message.action !== "analyzeTab") return;
@@ -592,3 +718,20 @@ function crawlSite(message, sendResponse) {
     });
   });
 }
+
+// Recurring + install-time update checks. The popup can also trigger one via
+// the checkUpdate message.
+chrome.runtime.onInstalled.addListener(function () { wdCheckUpdate(false); });
+chrome.runtime.onStartup.addListener(function () { wdCheckUpdate(false); });
+chrome.alarms.create("wd-update-check", { periodInMinutes: 360 });
+chrome.alarms.onAlarm.addListener(function (alarm) {
+  if (alarm && alarm.name === "wd-update-check") wdCheckUpdate(false);
+});
+
+chrome.notifications.onButtonClicked.addListener(function (id, index) {
+  if (id !== "wd-update") return;
+  if (index === 0) {
+    chrome.tabs.create({ url: "https://github.com/" + WD_GITHUB.owner + "/" + WD_GITHUB.repo + "/tags" }, function () { void chrome.runtime.lastError; });
+  }
+  chrome.notifications.clear(id, function () { void chrome.runtime.lastError; });
+});
