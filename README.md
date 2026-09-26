@@ -20,7 +20,7 @@ It was built to answer three questions about any site you open:
 ## What's New in v1.3.0
 
 ### New features
-- **Version Manager** — a new **Version** tab lists every published release (newest first, pulled from GitHub tags with a built-in fallback), shows which release is **Installed** and **Active**, and lets you **switch to any previous version** — one click sets it as the active version and downloads that release's `.zip` package for a full manual rollback.
+- **Version Manager** — a new **Version** tab lists every published release (newest first, pulled live from GitHub tags with a built-in fallback), tags which release is **Installed** and **Active**, and marks anything not published to GitHub as **Unpublished** (disabled, so you never switch to a version that cannot be fetched). Switching is **fully automatic via the GitHub API** — no manual browsing or file download on your part: the extension validates the tag on GitHub, sets it active, and starts the package download, then the packaged **`tools/webdoctor-update.ps1`** applies it over the unpacked folder (a Chrome extension cannot replace its own running files, so the apply step runs outside the browser and finishes with one reload at `chrome://extensions`).
 - **GitHub update checker** — the background service worker compares the installed version against the latest GitHub tag (on install, on browser start, every 6 hours, and whenever the popup opens) and raises a **browser notification** — *"Web Doctor update available"* — with a *View release* button. Each published version notifies only once.
 - **In-popup update banner** — when a newer version exists, a slim banner appears at the top of the popup with a *View release* link so you can jump straight to the release notes.
 
@@ -58,8 +58,11 @@ It was built to answer three questions about any site you open:
 - **Complete audit report** — exports a clean, plain-text-branded HTML or Word-ready report generated from the audit.
 - **Site crawler** — queue-based crawl across linked pages (deduped, capped, stop-safe) that keeps results in a dedicated report tab via a service-worker-hosted blob.
 
-### Versioning & updates
-- **Version Manager** — every release listed newest-first with **Installed** / **Active** badges; one-click **Switch** saves the active version and downloads that release's `.zip` package.
+### Dynamic version switching (GitHub API)
+- Switch to any **published** version from the **Version** tab — the extension calls the GitHub API directly, verifies the tag exists, and pulls the package automatically (no manual zip download).
+- **`tools/webdoctor-update.ps1`** (shipped inside `webdoctor.zip`) is the apply step: run `.\tools\webdoctor-update.ps1 -Version v1.2.0` in the unpacked folder and reload the extension. With no `-Version` it applies the latest tag.
+- Versions that are not yet pushed as GitHub tags show as **Unpublished** and can't be switched to — publish the tag and the list updates automatically.
+- **Updates live in the Git repository.** All package changes are made by editing the source inside `webdoctor.zip`, rebuilding it, and committing `webdoctor.zip` + `README.md` to the repo (`github.com/Nabinkdk7/web-health-doctor`) — the repo is the single source of truth, and every release ships only through it.
 - **Update notifications** — the extension checks GitHub in the background (on install, startup, every 6 h, and on popup open) and raises a browser notification when a newer version is published, plus an in-popup banner pointing at the release.
 
 ### Everything stays clean
@@ -93,7 +96,7 @@ The `webdoctor.zip` in the repo root **is** the packaged extension. To rebuild i
 
 ```powershell
 Compress-Archive -Path manifest.json, background.js, content.js, crawl-planner.js, `
-  popup.html, popup.css, panel.css, popup.js, README.md, icons\ `
+  popup.html, popup.css, panel.css, popup.js, README.md, icons\, tools\ `
   -DestinationPath webdoctor.zip -Force
 ```
 
@@ -114,7 +117,7 @@ The repository root is a minimal distribution package:
 └── webdoctor.zip    # The complete extension (all source files, styles, and icons)
 ```
 
-Every extension file — `manifest.json`, `popup.html`, `popup.css`, `panel.css`, `popup.js`, `content.js`, `background.js`, `crawl-planner.js`, and `icons/` — lives inside `webdoctor.zip` at its root, ready to load unpacked. To work on the source, unzip the package, edit the files, and re-zip it.
+Every extension file — `manifest.json`, `popup.html`, `popup.css`, `panel.css`, `popup.js`, `content.js`, `background.js`, `crawl-planner.js`, and `icons/` — lives inside `webdoctor.zip` at its root, ready to load unpacked, and the `tools/` folder holds `webdoctor-update.ps1`, the GitHub-API apply step for switching versions. To work on the source, unzip the package, edit the files, and re-zip it.
 
 ## Release history
 
