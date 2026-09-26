@@ -71,11 +71,12 @@ It was built to answer three questions about any site you open:
 
 ### Option A — Load unpacked (for development / personal use)
 
-1. Download or clone this repository.
-2. Open Chrome or Edge and go to `chrome://extensions` (or `edge://extensions`).
-3. Toggle **Developer mode** on (top-right corner).
-4. Click **Load unpacked** and select the folder containing `manifest.json` (the repo root).
-5. Pin **Web Doctor** to the toolbar, open any page, and click the icon.
+1. Download or clone this repository (or grab `webdoctor.zip` directly).
+2. Unzip `webdoctor.zip` into a folder.
+3. Open Chrome or Edge and go to `chrome://extensions` (or `edge://extensions`).
+4. Toggle **Developer mode** on (top-right corner).
+5. Click **Load unpacked** and select the unzipped folder containing `manifest.json`.
+6. Pin **Web Doctor** to the toolbar, open any page, and click the icon.
 
 ### Option B — Packaged ZIP (for the Chrome Web Store / Edge Add-ons)
 
@@ -87,6 +88,8 @@ It was built to answer three questions about any site you open:
 > The ZIP must contain `manifest.json` at its root — do not wrap the files in an extra folder unless the store validator accepts it.
 
 ### Building your own ZIP
+
+The `webdoctor.zip` in the repo root **is** the packaged extension. To rebuild it after working on the source (extract the zip, edit the files, then re-package from that folder):
 
 ```powershell
 Compress-Archive -Path manifest.json, background.js, content.js, crawl-planner.js, `
@@ -103,17 +106,15 @@ Compress-Archive -Path manifest.json, background.js, content.js, crawl-planner.j
 
 ## Project structure
 
+The repository root is a minimal distribution package:
+
 ```
-├── manifest.json        # MV3 manifest (permissions, popup, background)
-├── popup.html           # Popup UI / tab shell
-├── popup.css            # Popup component styles
-├── panel.css            # Tab rail + shared panel styles
-├── popup.js             # Popup logic: tabs, analysis orchestration, reports
-├── content.js           # On-demand page analysis engine (injected at scan time)
-├── background.js        # Service worker: device windows, captures, crawl, blob hosting, version/update checks
-├── crawl-planner.js     # Crawl queue builder (dedupe, cap, normalization)
-└── icons/               # 16/32/48/128 px extension icons
+├── README.md        # This file
+├── .gitignore       # Local tooling / artifact ignores
+└── webdoctor.zip    # The complete extension (all source files, styles, and icons)
 ```
+
+Every extension file — `manifest.json`, `popup.html`, `popup.css`, `panel.css`, `popup.js`, `content.js`, `background.js`, `crawl-planner.js`, and `icons/` — lives inside `webdoctor.zip` at its root, ready to load unpacked. To work on the source, unzip the package, edit the files, and re-zip it.
 
 ## Release history
 
