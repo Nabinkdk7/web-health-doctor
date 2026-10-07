@@ -1,11 +1,24 @@
-# Web Doctor
+# Website Doctor
 
 > Diagnose. Debug. Optimize.
 
-**Web Doctor** is a browser extension that checks the health of any webpage. One click runs a full, on-demand audit of the page you're on — DOM size, core-web-vitals performance, responsiveness, SEO, accessibility, structure, and the technology behind the site — then shows you exactly what to fix and where.
+**Website Doctor** is a browser extension that checks the health of any webpage. One click runs a full, on-demand audit of the page you're on — DOM size, core-web-vitals performance, responsiveness, SEO, accessibility, structure, and the technology behind the site — then shows you exactly what to fix and where.
 
-![Version](https://img.shields.io/badge/version-2.0.0-blue)
+![Version](https://img.shields.io/badge/version-2.2.0-blue)
 ![Manifest](https://img.shields.io/badge/Chrome%20Manifest-v3-green)
+
+## Install
+
+1. Download `webdoctor.zip` from this repo and unzip it into a folder.
+2. Open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked**, and select that folder.
+
+## What's New in v2.2.0
+
+- Renamed to **Website Doctor**.
+- **Animated Overview** with staggered stat cards, growing and shimmering issue bars, and a glowing health ring.
+- **New sidebar icons** — every dashboard section has its own icon.
+- **GitHub auto-update**: the dashboard header shows *Update vX.Y.Z available* whenever a newer release is published here. One click downloads it. `tools/website-doctor-update.ps1` backs up your current copy, then installs the update. Press **Reload** at `chrome://extensions` to finish.
+- Fixed padding on timing rows and spacing in the Overview.
 
 ## About
 
@@ -17,11 +30,36 @@ It was built to answer three questions about any site you open:
 2. **Why is it slow / heavy / broken?** — Core Web Vitals (LCP, CLS, INP) measured from the real timeline, oversized DOM hotspots, broken links, missing alt text, unlabeled controls, dead anchors.
 3. **What is it built with?** — technology, framework, CMS, and library detection with element-level targeting so fixes are concrete and locatable.
 
+## What's New in v2.1.0
+
+### Developer Dashboard
+- A full-page audit view (the **Dashboard** button in the popup header) that opens the scan in a browser tab. Same real engine, same normalized issue list, far more room: **Overview** (score ring, issue bars by area, Core Web Vitals, timing, top issues), **Performance & CWV**, **DOM & Structure**, **SEO**, **Accessibility**, **Responsive**, **JavaScript**, **CSS**, **Images**, **Links**, **Forms**, **Technology & Platform** (with a platform blueprint for WordPress/Shopify/Wix/BigCommerce/Elementor), and **Reports**.
+- Each issue card expands to Evidence / Why it matters / Fix / Measured-with, plus an **Affected elements** list showing the exact CSS selector, URL, and HTML snippet the analyzer captured.
+- **Rescan** re-runs the analyzer against the previously scanned tab (or the current active tab), and **CSV / JSON** exports are generated locally.
+- The dashboard opens instantly on the popup's latest scan: results are cached in `chrome.storage.session` and, when missing or stale, a rescan restores them.
+
+### Real Core Web Vitals
+- LCP and INP now truly populate: the analyzer keeps **buffered `PerformanceObserver`s** for `largest-contentful-paint` and interaction `event` entries, because Chrome does not return those entry types from `getEntriesByType()`. INP is the worst qualifying interaction; a page that never reported a value shows **Not available** — never an estimate.
+
+### Per-element evidence everywhere
+- Image alt gaps, unlabeled inputs, unnamed buttons/links/iframes/navs, empty headings, duplicate IDs, placeholder/fragment links, and oversized images now carry real selectors (`cssPathOf`) and HTML snippets captured at scan time.
+
+### Polished popup
+- Live **Core Web Vitals quick-scan** card with LCP / INP / CLS verdicts plus TTFB / First Paint / FCP / Load timing on the Overview.
+- **Verification sounds** toggle in Settings (persisted, default on).
+- Version pill always reads `chrome.runtime.getManifest().version` — never hardcoded.
+
+### Optional AI assistant (dashboard)
+- **AI Chat** and **AI Providers** sections in the dashboard, plus **Debug with AI** on every issue card. Multi-provider: bring your own key for OpenRouter, AgentRouter, Google Gemini, Groq, Cerebras, Mistral, OpenAI, or any OpenAI-compatible endpoint.
+- **One-key AI welcome screen** in the AI Chat tab: until a provider is connected, a friendly setup card asks for a single API key (OpenRouter `sk-or-…`, Google `AIza…`, Groq `gsk_…`, OpenAI `sk-…`). The provider is auto-detected as you type, a default model is seeded, the connection is tested, and the chat is immediately ready — no settings hunt required.
+- **AI Core** (`ai-core.js`) routes by technical task requirements, streams replies, retries with rate-limit awareness, and falls back across providers; **Free AI Mode** restricts to free models. API keys stay in `chrome.storage.local`, are sent only to that provider's endpoint, are masked in the UI, and diagnostics are sanitized before leaving the machine.
+- Hallucination guard: scan facts are labeled **Detected**, reasoning is labeled **Possible cause**, and a **Before / After** compare re-scans the page to verify a fix with real measured values. The scanner never depends on AI — everything else works with no provider configured.
+
 ## What's New in v2.0.0
 
 ### New features
-- **Unified Website Health card** — the Overview opens with a single animated health score out of 100: a letter grade, a live score ring, the top DOM contributor, a category grid, and prioritized quick wins pulled from every module at once.
-- **Overview search bar** — search all findings across modules live (page, performance, SEO, accessibility, responsive, hidden content, DOM), with severity and category filters and a top-critical list that ranks the highest-impact issues first.
+- **Lightweight Overview** — the popup Overview shows only the essentials: the Website Health score out of 100 (letter grade plus score ring), the Core Vitals quick scan, the issue summary, and the top DOM contributor, with a single button into the Dashboard. Hover lifts and entrance animations were removed so the popup stays fast.
+- **Dashboard findings browser** — search all findings across modules live (page, performance, SEO, accessibility, responsive, hidden content, DOM), with severity and category filters, per-category scores, and prioritized quick wins pulled from every module at once.
 - **Dark mode & light mode** — a high-contrast dark theme is the default; switch to light anytime from the Settings menu. The choice is persisted and applied instantly.
 - **Compact single-row header** — brand, version pill, domain pill with favicon, and scan action all fit in one slim row with a settings menu (theme, repository link).
 - **DEV-MOD hidden-content scanner** — discovers sections hidden by `display:none`, media queries, and builder techniques (Elementor and other page builders detected), then lets you **Unhide All**, inspect one at a time, or **Restore All** to revert.
@@ -105,7 +143,8 @@ The `webdoctor.zip` in the repo root **is** the packaged extension. To rebuild i
 
 ```powershell
 Compress-Archive -Path manifest.json, background.js, content.js, crawl-planner.js, `
-  popup.html, popup.css, panel.css, popup.js, README.md, icons\, tools\ `
+  popup.html, popup.css, panel.css, popup.js, wd-common.js, `
+  dashboard.html, dashboard.css, dashboard.js, ai-core.js, README.md, icons\, tools\ `
   -DestinationPath webdoctor.zip -Force
 ```
 
@@ -115,7 +154,7 @@ Compress-Archive -Path manifest.json, background.js, content.js, crawl-planner.j
 2. Open **Web Doctor** from the toolbar — the active page is analyzed automatically.
 3. Browse the report by tab (**Overview**, **DOM**, **DEV-MOD**, **Perf**, **SEO**, **Struct**, **Tech**, **A11y**, **Debug**, **Devices**, **Audit**).
 4. In **Overview**, read the Website Health score, then use the search bar and filters to drill into every finding across all modules.
-5. Use **Rescan** to re-run on the current page, **DEV-MOD** for the deep-dive tools, **Devices** to test at real screen sizes (and apply/responsive fixes), **Audit → Crawl** to analyze linked pages across the site, and **Audit → Export / Convert to Docs** to save the report.
+5. Use **Rescan** to re-run on the current page, **DEV-MOD** for the deep-dive tools, **Devices** to test at real screen sizes (and apply/responsive fixes), **Audit → Crawl** to analyze linked pages across the site, and **Audit → Export / Convert to Docs** to save the report. Press **Dashboard** any time to open the same scan in a full-page developer dashboard with rescan and CSV/JSON exports.
 
 ## Project structure
 
@@ -127,12 +166,13 @@ The repository root is a minimal distribution package:
 └── webdoctor.zip    # The complete extension (all source files, styles, and icons)
 ```
 
-Every extension file — `manifest.json`, `popup.html`, `popup.css`, `panel.css`, `popup.js`, `content.js`, `background.js`, `crawl-planner.js`, and `icons/` — lives inside `webdoctor.zip` at its root, ready to load unpacked, and the `tools/` folder holds `webdoctor-update.ps1`, the GitHub-API apply step for switching versions. To work on the source, unzip the package, edit the files, and re-zip it.
+Every extension file — `manifest.json`, `popup.html`, `popup.css`, `panel.css`, `popup.js`, `wd-common.js` (shared data helpers for popup + dashboard), `dashboard.html`, `dashboard.css`, `dashboard.js` (full-page audit view), `ai-core.js` (optional multi-provider AI layer for the dashboard — the scanner never depends on it), `content.js`, `background.js`, `crawl-planner.js`, and `icons/` — lives inside `webdoctor.zip` at its root, ready to load unpacked, and the `tools/` folder holds `webdoctor-update.ps1`, the GitHub-API apply step for switching versions. To work on the source, unzip the package, edit the files, and re-zip it.
 
 ## Release history
 
 | Version | Highlights |
 | --- | --- |
+| **v2.1.0** | Developer Dashboard tab (15 sections + reports + rescan + CSV/JSON exports), real LCP/INP via buffered PerformanceObservers, per-element issue evidence, Live CWV quick-scan card, optional multi-provider AI assistant (chat, Debug-with-AI, Before/After compare), scan cache via `chrome.storage.session`, verification-sound toggle, manifest-driven version pill |
 | **v2.0.0** | Website Health score card + global Overview search, dark/light theme, compact header, hidden-content scanner with Unhide All, clean CSS inspector, Devices tab with 4-breakpoint responsive audit + apply/restore fixes, Convert-to-Docs export, update checker + in-popup banner |
 | v1.3.0 | Version Manager, GitHub update checker with browser notification, in-popup update banner, scan verdict toast, reliable synthesized audio, tab-rail polish |
 | v1.2.0 | Sci-fi danger sound + reliable (autoplay-safe) audio playback |
