@@ -4,13 +4,17 @@
 
 **Website Doctor** is a browser extension that checks the health of any webpage. One click runs a full, on-demand audit of the page you're on — DOM size, core-web-vitals performance, responsiveness, SEO, accessibility, structure, and the technology behind the site — then shows you exactly what to fix and where.
 
-![Version](https://img.shields.io/badge/version-2.4.13-blue)
+![Version](https://img.shields.io/badge/version-2.4.16-blue)
 ![Manifest](https://img.shields.io/badge/Chrome%20Manifest-v3-green)
 
 ## Install
 
 1. Download `webdoctor.zip` from this repo and unzip it into a folder.
 2. Open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked**, and select that folder.
+
+## What's New in v2.4.16
+
+- **Reverted the v2.4.17 redesign** back to the stable v2.4.13 UX (clean popup with hover intact, dashboard side-panel layout, per-tab scan context, auto-update watcher).
 
 ## What's New in v2.4.13
 
